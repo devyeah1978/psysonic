@@ -3,6 +3,15 @@ import { findServerByIdOrIndexKey } from '@/lib/server/serverLookup';
 export interface ArtistDetailPathOptions {
   serverId?: string | null;
   search?: string | URLSearchParams;
+  /**
+   * Display name of the concrete artist credit that opened the page.
+   *
+   * OpenSubsonic track credits may carry an artist id that has no standalone
+   * `getArtist` row (guest/featured artists). Preserve the clicked structured
+   * name so the detail page can keep the route identity even when the server's
+   * legacy artist endpoint cannot resolve that id cleanly.
+   */
+  artistName?: string | null;
 }
 
 /** Build an album detail path while preserving query parameters and owning server. */
@@ -23,6 +32,7 @@ export function buildArtistDetailPath(
 ): string {
   const params = new URLSearchParams(options.search ?? '');
   if (options.serverId) params.set('server', options.serverId);
+  if (options.artistName?.trim()) params.set('artistName', options.artistName.trim());
   const query = params.toString();
   return `/artist/${artistId}${query ? `?${query}` : ''}`;
 }
