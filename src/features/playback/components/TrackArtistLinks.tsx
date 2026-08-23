@@ -34,9 +34,12 @@ export function TrackArtistLinks({
 			refs={refs}
 			serverId={track.serverId ?? activeServerId}
 			fallbackName={track.artist}
-			onGoArtist={(id) => {
+			onGoArtist={(id, artistName) => {
 				void onNavigate(
-					buildArtistDetailPath(id, { serverId: track.serverId }),
+					buildArtistDetailPath(id, {
+						serverId: track.serverId,
+						artistName,
+					}),
 				);
 			}}
 			as="span"
