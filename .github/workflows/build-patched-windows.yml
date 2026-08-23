@@ -1,9 +1,6 @@
 name: Build Patched Windows
 
 on:
-  push:
-    branches:
-      - build/windows-patched
   pull_request:
     branches:
       - fix/preserve-opensubsonic-artists
@@ -38,7 +35,7 @@ jobs:
 
       - name: Run N1 artist preservation regression test
         working-directory: src-tauri
-        run: cargo test -p psysonic-library n1_delta_preserves_structured_artist_refs_when_native_row_omits_them -- --nocapture
+        run: cargo test --workspace --all-targets n1_delta_preserves_structured_artist_refs_when_native_row_omits_them -- --nocapture
 
       - name: Build unsigned NSIS installer
         run: npm run tauri:build -- --bundles nsis
