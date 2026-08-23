@@ -1,0 +1,57 @@
+name: Build Patched Windows
+
+on:
+  pull_request:
+    branches:
+      - fix/preserve-opensubsonic-artists
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout patched branch
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22.22.0
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run N1 sparse preservation regression test
+        working-directory: src-tauri
+        run: cargo test --workspace --all-targets n1_delta_preserves_structured_artist_refs_when_native_row_omits_them -- --nocapture
+
+      - name: Run participant normalization regression test
+        working-directory: src-tauri
+        run: cargo test --workspace --all-targets navidrome_song_normalizes_current_participants_into_structured_artist_refs -- --nocapture
+
+      - name: Run remap merge regression test
+        working-directory: src-tauri
+        run: cargo test --workspace --all-targets sparse_remap_merges_from_resolved_old_row_before_deleting_it -- --nocapture
+
+      - name: Build unsigned NSIS installer
+        run: npm run tauri:build -- --bundles nsis
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: psysonic-1.52.0-dev-patched-windows-current
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
