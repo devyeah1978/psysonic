@@ -5,8 +5,8 @@ interface Props {
   refs: SubsonicOpenArtistRef[];
   /** Used when `refs` is empty (callers should normally avoid that). */
   fallbackName: string;
-  /** Invoked with Subsonic artist id when a ref has an id. */
-  onGoArtist: (artistId: string) => void;
+  /** Invoked with Subsonic artist id and the concrete displayed credit name. */
+  onGoArtist: (artistId: string, artistName?: string) => void;
   /** Wrapper element: `span` (default) or `fragment` children only. */
   as?: 'span' | 'none';
   /** `button` for album header; `span` matches dense player / track rows. */
@@ -49,13 +49,13 @@ export function OpenArtistRefInline({
                 className={linked}
                 onClick={e => {
                   e.stopPropagation();
-                  onGoArtist(a.id!);
+                  onGoArtist(a.id!, a.name ?? fallbackName);
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     e.stopPropagation();
-                    onGoArtist(a.id!);
+                    onGoArtist(a.id!, a.name ?? fallbackName);
                   }
                 }}
               >
@@ -67,7 +67,7 @@ export function OpenArtistRefInline({
                 className={linked}
                 onClick={e => {
                   e.stopPropagation();
-                  onGoArtist(a.id!);
+                  onGoArtist(a.id!, a.name ?? fallbackName);
                 }}
               >
                 {a.name ?? fallbackName}
