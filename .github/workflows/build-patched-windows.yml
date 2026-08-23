@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - build/windows-patched
+  pull_request:
+    branches:
+      - fix/preserve-opensubsonic-artists
   workflow_dispatch:
 
 jobs:
