@@ -44,11 +44,11 @@ describe("TrackArtistLinks", () => {
 		const guest = await screen.findByRole("link", { name: "Guest" });
 		fireEvent.keyDown(guest, { key: "Enter" });
 		expect(onNavigate).toHaveBeenCalledWith(
-			"/artist/guest-id?server=srv-owner",
+			"/artist/guest-id?server=srv-owner&artistName=Guest",
 		);
 	});
 
-	it("keeps structured OpenSubsonic artists authoritative", () => {
+	it("keeps structured OpenSubsonic artists authoritative and carries the clicked name", () => {
 		const onNavigate = vi.fn();
 
 		renderWithProviders(
@@ -67,7 +67,12 @@ describe("TrackArtistLinks", () => {
 		);
 
 		expect(screen.getByRole("link", { name: "Primary" })).toBeTruthy();
-		expect(screen.getByRole("link", { name: "Guest" })).toBeTruthy();
+		const guest = screen.getByRole("link", { name: "Guest" });
 		expect(resolveArtistIds).not.toHaveBeenCalled();
+
+		fireEvent.click(guest);
+		expect(onNavigate).toHaveBeenCalledWith(
+			"/artist/guest-id?server=srv-owner&artistName=Guest",
+		);
 	});
 });
