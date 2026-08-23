@@ -54,6 +54,8 @@ beforeEach(() => {
   });
   vi.mocked(getTopSongs).mockResolvedValue([]);
   vi.mocked(getTopSongsForServer).mockResolvedValue([]);
+  vi.mocked(getArtistInfo).mockResolvedValue({});
+  vi.mocked(getArtistInfoForServer).mockResolvedValue({});
   vi.mocked(search).mockResolvedValue({ songs: [], albums: [], artists: [] });
   vi.mocked(searchForServer).mockResolvedValue({ songs: [], albums: [], artists: [] });
 });
@@ -70,6 +72,14 @@ function secondaryServerWrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(
     MemoryRouter,
     { initialEntries: ['/artist/A?server=srv-b'] },
+    children,
+  );
+}
+
+function guestNameWrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(
+    MemoryRouter,
+    { initialEntries: ['/artist/guest-id?artistName=Loosie%20Grind'] },
     children,
   );
 }
@@ -145,6 +155,83 @@ describe('useArtistDetailData — id-gated info', () => {
 
     await act(async () => { b.resolve({ largeImageUrl: 'B.jpg' } as SubsonicArtistInfo); });
     await waitFor(() => expect(result.current.info).toEqual({ largeImageUrl: 'B.jpg' }));
+  });
+
+  it('clears the previous artist header while a new route identity is unresolved', async () => {
+    const b = deferred<{ artist: { id: string; name: string }; albums: [] }>();
+    vi.mocked(getArtist).mockImplementation(async (id) => {
+      if (id === 'A') return { artist: { id: 'A', name: 'Artist A' }, albums: [] };
+      return b.promise;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useArtistDetailData(id),
+      { initialProps: { id: 'A' }, wrapper: routerWrapper },
+    );
+    await waitFor(() => expect(result.current.artist?.name).toBe('Artist A'));
+
+    rerender({ id: 'B' });
+    await waitFor(() => expect(result.current.artist).toBeNull());
+
+    await act(async () => { b.resolve({ artist: { id: 'B', name: 'Artist B' }, albums: [] }); });
+    await waitFor(() => expect(result.current.artist?.name).toBe('Artist B'));
+  });
+
+  it('uses the clicked structured credit name instead of a joined legacy artist name', async () => {
+    vi.mocked(getArtist).mockResolvedValue({
+      artist: { id: 'guest-id', name: 'Loosie Grind, FOVOS' },
+      albums: [],
+    });
+
+    const { result } = renderHook(() => useArtistDetailData('guest-id'), {
+      wrapper: guestNameWrapper,
+    });
+
+    await waitFor(() => expect(result.current.artist?.name).toBe('Loosie Grind'));
+    expect(getTopSongs).toHaveBeenCalledWith('Loosie Grind');
+  });
+
+  it('renders a guest-only artist and finds appearances through structured artists[]', async () => {
+    vi.mocked(getArtist).mockRejectedValue(new Error('artist not found'));
+    vi.mocked(getTopSongs).mockResolvedValue([
+      {
+        id: 'top1',
+        title: 'Freak in me',
+        artist: 'Loosie Grind, FOVOS',
+        artistId: 'primary-id',
+        artists: [{ id: 'guest-id', name: 'Loosie Grind' }, { id: 'primary-id', name: 'FOVOS' }],
+        album: 'Best Of The Year: 2025',
+        albumId: 'album1',
+        duration: 180,
+      },
+    ]);
+    vi.mocked(search).mockResolvedValue({
+      artists: [],
+      albums: [],
+      songs: [
+        {
+          id: 's1',
+          title: 'Freak in me',
+          artist: 'Loosie Grind, FOVOS',
+          artistId: 'primary-id',
+          artists: [{ id: 'guest-id', name: 'Loosie Grind' }, { id: 'primary-id', name: 'FOVOS' }],
+          album: 'Best Of The Year: 2025',
+          albumId: 'album1',
+          albumArtist: 'Various Artists',
+          coverArt: 'cover1',
+          duration: 180,
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useArtistDetailData('guest-id'), {
+      wrapper: guestNameWrapper,
+    });
+
+    await waitFor(() => expect(result.current.artist?.name).toBe('Loosie Grind'));
+    await waitFor(() => expect(result.current.topSongs).toHaveLength(1));
+    await waitFor(() => expect(result.current.featuredAlbums).toHaveLength(1));
+    expect(result.current.featuredAlbums[0]?.id).toBe('album1');
   });
 
   it('keeps the album-artist credit on featured compilation albums', async () => {

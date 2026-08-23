@@ -11,7 +11,7 @@ interface Props {
   serverId: string | null | undefined;
   /** Used when `refs` is empty (callers should normally avoid that). */
   fallbackName: string;
-  onGoArtist: (artistId: string) => void;
+  onGoArtist: (artistId: string, artistName?: string) => void;
   as?: 'span' | 'none';
   linkTag?: 'button' | 'span';
   outerClassName?: string;

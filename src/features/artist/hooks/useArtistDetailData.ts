@@ -64,6 +64,17 @@ function filterNetworkArtistToLossless(
   };
 }
 
+function withRouteArtistName(
+  artist: SubsonicArtist,
+  routeArtistName: string | null,
+): SubsonicArtist {
+  return routeArtistName ? { ...artist, name: routeArtistName } : artist;
+}
+
+function songCreditsArtist(song: SubsonicSong, artistId: string): boolean {
+  return song.artistId === artistId || song.artists?.some(ref => ref.id === artistId) === true;
+}
+
 /** Owning server reported by the artist row the scoped loader resolved. */
 interface ArtistInfoOwner {
   /** Route artist id this owner was resolved for — a later route keeps its own. */
@@ -119,6 +130,7 @@ export function useArtistDetailData(
   // Same lookup without the active-server fallback: this tells apart a route that names
   // its owning server from one where `serverId` is only "the active server" standing in.
   const routeServerId = readDetailServerId(searchParams, null);
+  const routeArtistName = searchParams.get('artistName')?.trim() || null;
   const favoritesOfflineEnabled = useAuthStore(s => s.favoritesOfflineEnabled);
   const { status: connStatus } = useConnectionStatus();
   const libraryBrowseScopeVersion = useAuthStore(s => s.libraryBrowseScopeVersion);
@@ -146,6 +158,12 @@ export function useArtistDetailData(
     // React Compiler set-state-in-effect rule: state set from an async result resolved in this effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
+    // Artist/albums are route identity-bound too. Keeping the previous route's row
+    // while the next request fails is what produced pages such as a Nina Nesbitt bio
+    // under a stale "Jonas Blue — 10 Albums" header.
+    setArtist(null);
+    setAlbums([]);
+    setIsStarred(false);
     setInfoEntry(null);
     setTopSongs([]);
     setTopSongsLoading(false);
@@ -170,14 +188,15 @@ export function useArtistDetailData(
             : await tryLoadArtistDetailMultiScope(currentBrowseScope.pairs, serverId, id);
           if (cancelled) return;
           if (multi) {
-            setArtist(multi.artist);
+            const resolvedArtist = withRouteArtistName(multi.artist, routeArtistName);
+            setArtist(resolvedArtist);
             // The merged row carries the server it won on, which is the only owner a
             // route without `?server=` has. This is the sole loader reachable under a
             // multi-server scope, so no other branch has to report one.
-            setArtistOwner(multi.artist.serverId && multi.artist.id
-              ? { forId: id, serverId: multi.artist.serverId, artistId: multi.artist.id }
+            setArtistOwner(resolvedArtist.serverId && resolvedArtist.id
+              ? { forId: id, serverId: resolvedArtist.serverId, artistId: resolvedArtist.id }
               : null);
-            setIsStarred(!!multi.artist.starred);
+            setIsStarred(!!resolvedArtist.starred);
             setAlbums(multi.albums);
             // "Appears on" is split locally from the same scoped album set, so it
             // works under multi-server scopes and needs no network search (the
@@ -195,7 +214,7 @@ export function useArtistDetailData(
               setTopSongsLoading(true);
               try {
                 const ranked = await loadScopedArtistTopSongs({
-                  artistName: multi.artist.name,
+                  artistName: resolvedArtist.name,
                   sourceServerId: multi.topTracksServerId,
                   scopes: currentBrowseScope.pairs,
                   localFallback: multi.topSongs,
@@ -218,8 +237,9 @@ export function useArtistDetailData(
             : await loadArtistFromLibraryIndex(serverId, id);
           if (cancelled) return;
           if (local) {
-            setArtist(local.artist);
-            setIsStarred(!!local.artist.starred);
+            const resolvedArtist = withRouteArtistName(local.artist, routeArtistName);
+            setArtist(resolvedArtist);
+            setIsStarred(!!resolvedArtist.starred);
             setAlbums(local.albums);
             // Preserve the own / appears-on split offline, so the artist page keeps
             // its "Also featured on" section instead of merging everything into the
@@ -244,8 +264,11 @@ export function useArtistDetailData(
               : await getArtist(id).catch(() => null);
             if (cancelled) return;
             if (artistData) {
-              setArtist(artistData.artist);
-              setIsStarred(!!artistData.artist.starred);
+              const resolvedArtist = withRouteArtistName(artistData.artist, routeArtistName);
+              setArtist(resolvedArtist);
+              setIsStarred(!!resolvedArtist.starred);
+            } else if (routeArtistName) {
+              setArtist({ id, name: routeArtistName, albumCount: 0, serverId });
             }
             setAlbums(local.albums);
             setTopSongs([...local.songs].sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)));
@@ -258,17 +281,18 @@ export function useArtistDetailData(
           ? await getArtistForServer(serverId, id)
           : await getArtist(id);
         if (cancelled) return;
-        setArtist(artistData.artist);
+        const resolvedArtist = withRouteArtistName(artistData.artist, routeArtistName);
+        setArtist(resolvedArtist);
         let nextAlbums = artistData.albums;
-        setIsStarred(!!artistData.artist.starred);
+        setIsStarred(!!resolvedArtist.starred);
         setLoading(false);
 
         const canLoadTopSongs = !serverId || shouldAttemptSubsonicForServer(serverId);
         if (!canLoadTopSongs) return;
         setTopSongsLoading(true);
         const songsData = await (serverId
-          ? getTopSongsForServer(serverId, artistData.artist.name)
-          : getTopSongs(artistData.artist.name)
+          ? getTopSongsForServer(serverId, resolvedArtist.name)
+          : getTopSongs(resolvedArtist.name)
         ).catch(() => [] as SubsonicSong[]);
         if (cancelled) return;
         let nextSongs = songsData ?? [];
@@ -293,8 +317,9 @@ export function useArtistDetailData(
               : await loadArtistFromLibraryIndex(serverId, id);
             if (cancelled) return;
             if (local) {
-              setArtist(local.artist);
-              setIsStarred(!!local.artist.starred);
+              const resolvedArtist = withRouteArtistName(local.artist, routeArtistName);
+              setArtist(resolvedArtist);
+              setIsStarred(!!resolvedArtist.starred);
               setAlbums(local.albums);
               setFeaturedAlbums(local.appearsOnAlbums);
               setTopSongs([]);
@@ -303,6 +328,41 @@ export function useArtistDetailData(
             }
           } catch { /* ignore */ }
         }
+
+        // A structured OpenSubsonic credit is a valid artist identity even when the
+        // legacy getArtist/index tables have no standalone row for that guest. The
+        // clicked name is carried on the route so we can render the right identity,
+        // load name-based top songs, and let the featured search below discover the
+        // tracks whose structured `artists[]` contains this id.
+        if (routeArtistName) {
+          const guestArtist: SubsonicArtist = {
+            id,
+            name: routeArtistName,
+            albumCount: 0,
+            ...(serverId ? { serverId } : {}),
+          };
+          setArtist(guestArtist);
+          setIsStarred(false);
+          setAlbums([]);
+          setLoading(false);
+
+          const canLoadTopSongs = !serverId || shouldAttemptSubsonicForServer(serverId);
+          if (canLoadTopSongs) {
+            setTopSongsLoading(true);
+            const songsData = await (serverId
+              ? getTopSongsForServer(serverId, routeArtistName)
+              : getTopSongs(routeArtistName)
+            ).catch(() => [] as SubsonicSong[]);
+            if (cancelled) return;
+            const nextSongs = losslessOnly
+              ? (songsData ?? []).filter(s => isLosslessSuffix(s.suffix))
+              : (songsData ?? []);
+            setTopSongs(nextSongs);
+            setTopSongsLoading(false);
+          }
+          return;
+        }
+
         console.error(err);
         setTopSongsLoading(false);
         setLoading(false);
@@ -317,6 +377,7 @@ export function useArtistDetailData(
     offlineBrowseActive,
     preferLocalArtist,
     preferLocalBytesOnly,
+    routeArtistName,
     searchParams,
     serverId,
   ]);
@@ -382,7 +443,7 @@ export function useArtistDetailData(
       .catch(() => ({ songs: [], albums: [], artists: [] }))
       .then(searchResults => {
         let featuredSongs = (searchResults.songs ?? []).filter(
-          song => song.artistId === id && !ownAlbumIds.has(song.albumId),
+          song => songCreditsArtist(song, id) && !ownAlbumIds.has(song.albumId),
         );
         if (losslessOnly) {
           featuredSongs = featuredSongs.filter(s => isLosslessSuffix(s.suffix));
